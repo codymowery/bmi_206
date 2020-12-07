@@ -1,37 +1,45 @@
-library(tidyverse)
+# library(tidyverse)
+# 
+# infile = read_tsv('~/github/bmi_206/project/GSE99287_Retina_ATACSeq_peak_counts.txt')
+# infile
+# nrow(infile)
+# length(grep('Retina', colnames(infile), value = TRUE))
+# length(grep('NOR', grep('Retina', colnames(infile), value = TRUE)))
+# length(grep('AMD', grep('Retina', colnames(infile), value = TRUE)))
+# 
+# long = pivot_longer(infile, cols = grep('Retina', colnames(infile), value = TRUE), names_to = 'Sample', values_to = 'counts')
+# long
+# table(is.na(long$counts))
+# 
+# table(is.na(infile[,9:ncol]))
+# table(infile$Type)
+# table(is.na(infile))
+# 
+# long
+# table(long$Sample)
+# 
+# rho = long %>% filter(Gene == 'RHO')
 
-infile = read_tsv('~/github/bmi_206/project/GSE99287_Retina_ATACSeq_peak_counts.txt')
-infile
-nrow(infile)
-length(grep('Retina', colnames(infile), value = TRUE))
-length(grep('NOR', grep('Retina', colnames(infile), value = TRUE)))
-length(grep('AMD', grep('Retina', colnames(infile), value = TRUE)))
-
-long = pivot_longer(infile, cols = grep('Retina', colnames(infile), value = TRUE), names_to = 'Sample', values_to = 'counts')
-long
-table(is.na(long$counts))
-
-table(is.na(infile[,9:ncol]))
-table(infile$Type)
-table(is.na(infile))
-
-long
-table(long$Sample)
-
-rho = long %>% filter(Gene == 'RHO')
-
-
-## Load in normalized count table
-infile = read.csv('~/github/bmi_206/project/GSE99287_normed_counts.csv')
-## Fig 2D
 library(ggpubr)
 library(ggExtra)
 library(tidyverse)
 library(gridExtra)
+
+## Load in normalized count table
+infile = read.csv('~/github/bmi_206/project/GSE99287_normed_counts.csv')
+## Fig 2D
+
 fig2d = infile %>% 
   mutate(fc = AMD2_Retina_MacL/AMD2_Retina_MacR,
          avg = rowMeans(select(., grep('AMD2_Retina_Mac', colnames(infile))), na.rm = TRUE))
          # avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+t.test(infile$AMD2_Retina_MacL, infile$AMD2_Retina_MacR, paired = T)
+png('~/github/bmi_206/project/fig2d_normed_boxplot.png')
+bp = boxplot(infile$AMD2_Retina_MacL, infile$AMD2_Retina_MacR, log='y',
+        names = c("Left", "Right"),
+        main = 'Asymmetric Eyes',
+        ylab = 'Log10(ATAC Fragments)')
+dev.off()
 p = ggplot(fig2d, aes(log2(avg), log2(fc)))+
   geom_point(color='grey')+
   geom_smooth(se = FALSE)+
@@ -61,11 +69,61 @@ ggsave('~/github/bmi_206/project/fig2d_normed_gridArrange.png', g)
 # p3
 # ggsave('~/github/bmi_206/project/fig2d_normed.pdf')
 
+## Randomize fragments from one sample
+ran2d = infile %>% 
+  mutate(fc = AMD2_Retina_MacL/sample(AMD2_Retina_MacR),
+         avg = rowMeans(select(., grep('AMD2_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+prand = ggplot(ran2d, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD2')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(ran2d %>% filter(log2(fc)<0))/nrow(ran2d))*100, 1), "%")
+## Plot density with pct text above
+p2rand = ggplot(ran2d, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -3, y = 0.15, label = pct, size = 5)
+grand = grid.arrange(arrangeGrob(prand, p2rand, ncol=2, widths=c(2,1)))
+grand
+ggsave('~/github/bmi_206/project/fig2d_normed_gridArrange_random.png', grand)
+
+perm2d = c()
+for(i in 1:500){
+  ran = infile %>% 
+    mutate(fc = AMD2_Retina_MacL/sample(AMD2_Retina_MacR))
+  x = round((nrow(ran %>% filter(log2(fc)<0))/nrow(ran))*100, 1)
+  perm2d = append(perm2d, x)
+}
+hist(perm2d, 
+     xlab = 'Percent of Log2(FC) below Null (0)', 
+     main = 'Random Reassortment, n=500')
+
+
 ## Fig 2E
 fig2e = infile %>%
   mutate(fc = AMD1_Retina_MacL/AMD1_Retina_MacR,
          avg = rowMeans(select(., grep('AMD1_Retina_Mac', colnames(infile))), na.rm = TRUE))
 # avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+png('~/github/bmi_206/project/fig2e_normed_boxplot.png')
+bp = boxplot(infile$AMD1_Retina_MacL, infile$AMD1_Retina_MacR, log='y',
+             names = c("Left", "Right"),
+             main = 'Symmetric Eyes',
+             ylab = 'Log10(ATAC Fragments)')
+dev.off()
+t.test(infile$AMD1_Retina_MacL, infile$AMD1_Retina_MacR, paired = T)
 p3 = ggplot(fig2e, aes(log2(avg), log2(fc)))+
   geom_point(color='grey')+
   geom_smooth(se = FALSE)+
@@ -94,6 +152,205 @@ ggsave('~/github/bmi_206/project/fig2e_normed_gridArrange.png', g2)
 # p5 <- ggMarginal(p3, margins = 'y', color="red", size=4)
 # p4
 # ggsave('~/github/bmi_206/project/fig2e_normed.pdf')
+
+## Randomize fragments from one sample
+ran2e = infile %>% 
+  mutate(fc = AMD1_Retina_MacL/sample(AMD1_Retina_MacR),
+         avg = rowMeans(select(., grep('AMD1_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+p3rand = ggplot(ran2e, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD1')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(ran2e %>% filter(log2(fc)<0))/nrow(ran2e))*100, 1), "%")
+## Plot density with pct text above
+p4rand = ggplot(ran2e, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -3, y = 0.15, label = pct, size = 5)
+g2rand = grid.arrange(arrangeGrob(p3rand, p4rand, ncol=2, widths=c(2,1)))
+g2rand
+ggsave('~/github/bmi_206/project/fig2e_normed_gridArrange_random.png', g2rand)
+
+perm2e = c()
+for(i in 1:500){
+  ran = infile %>% 
+    mutate(fc = AMD1_Retina_MacL/sample(AMD1_Retina_MacR))
+  x = round((nrow(ran %>% filter(log2(fc)<0))/nrow(ran))*100, 1)
+  perm2e = append(perm2e, x)
+}
+hist(perm2e, 
+     xlab = 'Percent of Log2(FC) below Null (0)', 
+     main = 'Random Reassortment, n=500')
+
+
+
+
+
+## PRE NORMALIZED DATA
+## Load in normalized count table
+infile = read_tsv('~/github/bmi_206/project/GSE99287_Retina_ATACSeq_peak_counts.txt')
+## Fig 2D
+
+fig2d = infile %>% 
+  mutate(fc = AMD2_Retina_MacL/AMD2_Retina_MacR,
+         avg = rowMeans(select(., grep('AMD2_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+t.test(infile$AMD2_Retina_MacL, infile$AMD2_Retina_MacR, paired = T)
+png('~/github/bmi_206/project/fig2d_normed_boxplot_preNorm.png')
+bp = boxplot(infile$AMD2_Retina_MacL, infile$AMD2_Retina_MacR, log='y',
+             names = c("Left", "Right"),
+             main = 'Asymmetric Eyes',
+             ylab = 'Log10(ATAC Fragments)')
+dev.off()
+p = ggplot(fig2d, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD2')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(fig2d %>% filter(log2(fc)<0))/nrow(fig2d))*100, 1), "%")
+## Plot density with pct text above
+p2 = ggplot(fig2d, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -2, y = 0.3, label = pct, size = 5)
+g = grid.arrange(arrangeGrob(p, p2, ncol=2, widths=c(2,1)))
+g
+ggsave('~/github/bmi_206/project/fig2d_normed_gridArrange_preNorm.png', g)
+# p3 <- ggMarginal(p, margins = 'y', color="red", size=4)
+# p3
+# ggsave('~/github/bmi_206/project/fig2d_normed.pdf')
+
+## Randomize fragments from one sample
+ran2d = infile %>% 
+  mutate(fc = AMD2_Retina_MacL/sample(AMD2_Retina_MacR),
+         avg = rowMeans(select(., grep('AMD2_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+prand = ggplot(ran2d, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD2')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(ran2d %>% filter(log2(fc)<0))/nrow(ran2d))*100, 1), "%")
+## Plot density with pct text above
+p2rand = ggplot(ran2d, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -3, y = 0.15, label = pct, size = 5)
+grand = grid.arrange(arrangeGrob(prand, p2rand, ncol=2, widths=c(2,1)))
+grand
+ggsave('~/github/bmi_206/project/fig2d_normed_gridArrange_random_preNorm.png', grand)
+
+## Fig 2E
+fig2e = infile %>%
+  mutate(fc = AMD1_Retina_MacL/AMD1_Retina_MacR,
+         avg = rowMeans(select(., grep('AMD1_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+png('~/github/bmi_206/project/fig2e_normed_boxplot_preNorm.png')
+bp = boxplot(infile$AMD1_Retina_MacL, infile$AMD1_Retina_MacR, log='y',
+             names = c("Left", "Right"),
+             main = 'Symmetric Eyes',
+             ylab = 'Log10(ATAC Fragments)')
+dev.off()
+t.test(infile$AMD1_Retina_MacL, infile$AMD1_Retina_MacR, paired = T)
+p3 = ggplot(fig2e, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD1')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(fig2e %>% filter(log2(fc)<0))/nrow(fig2e))*100, 1), "%")
+## Plot density with pct text above
+p4 = ggplot(fig2e, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -2, y = 0.3, label = pct, size = 5)
+g2 = grid.arrange(arrangeGrob(p3, p4, ncol=2, widths=c(2,1)))
+g2
+ggsave('~/github/bmi_206/project/fig2e_normed_gridArrange_preNorm.png', g2)
+# p5 <- ggMarginal(p3, margins = 'y', color="red", size=4)
+# p4
+# ggsave('~/github/bmi_206/project/fig2e_normed.pdf')
+
+## Randomize fragments from one sample
+ran2e = infile %>% 
+  mutate(fc = AMD1_Retina_MacL/sample(AMD1_Retina_MacR),
+         avg = rowMeans(select(., grep('AMD1_Retina_Mac', colnames(infile))), na.rm = TRUE))
+# avg = rowMeans(select(., grep('Retina', colnames(infile))), na.rm = TRUE))
+p3rand = ggplot(ran2e, aes(log2(avg), log2(fc)))+
+  geom_point(color='grey')+
+  geom_smooth(se = FALSE)+
+  theme_pubr()+
+  geom_hline(yintercept=0, linetype="dashed", color = "black")+
+  xlab('Log2 Average Peak Signal for Each ATAC Fragment')+
+  ylab('Log2(FC) of Left vs Right Eye in  AMD1')+
+  scale_x_continuous(limits = c(0,17), breaks = c(5,10,15))+
+  scale_y_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))
+## calculate percent of dec fc
+pct = paste0(round((nrow(ran2e %>% filter(log2(fc)<0))/nrow(ran2e))*100, 1), "%")
+## Plot density with pct text above
+p4rand = ggplot(ran2e, aes(log2(fc)))+
+  # geom_histogram(color='red', bins=1000)+
+  geom_density(color='red')+
+  theme_pubr()+
+  coord_flip()+
+  geom_vline(xintercept=0, linetype="dashed", color = "black")+
+  scale_x_continuous(limits = c(-4,4), labels = c(-4,-2,0,2,4))+
+  theme(axis.title.y = element_blank())+
+  xlab('Density')+
+  annotate("text", x = -3, y = 0.15, label = pct, size = 5)
+g2rand = grid.arrange(arrangeGrob(p3rand, p4rand, ncol=2, widths=c(2,1)))
+g2rand
+ggsave('~/github/bmi_206/project/fig2e_normed_gridArrange_random_preNorm.png', g2rand)
+
+
+
+
+
 
 ## https://www.geeksforgeeks.org/kolmogorov-smirnov-test-in-r-programming/
 library(dgof)
